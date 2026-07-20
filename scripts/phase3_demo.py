@@ -89,7 +89,7 @@ def main() -> None:
 
     # Signal coverage by country
     print("\n--- Signal Coverage by Country ---")
-  for row in repo.conn.execute(
+    for row in repo.conn.execute(
         """
         SELECT b.country,
                COUNT(DISTINCT s.business_id) AS biz_with_signals,
@@ -148,7 +148,7 @@ def main() -> None:
     print(f"\n--- Revenue Shocks ---")
     print(f"  Business-months with shocks: {shocks:,} ({100*shocks/repo.count_true_revenue():.1f}%)")
 
-  print("\n  ⚠ true_revenue table is validation-only — estimator never reads it")
+    print("\n  ⚠ true_revenue table is validation-only — estimator never reads it")
     print("\nPhase 3 complete ✓")
     repo.close()
 
