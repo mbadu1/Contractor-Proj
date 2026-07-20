@@ -1,0 +1,43 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-geist-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #07090d;
+  color: #e8edf5;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-geist-sans);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(61, 156, 240, 0.12), transparent),
+    linear-gradient(180deg, #07090d 0%, #0c1017 100%);
+  background-attachment: fixed;
+}
+
+/* Leaflet dark tweaks */
+.leaflet-container {
+  font: inherit;
+  background: #0c1017;
+}
+
+.leaflet-popup-content-wrapper {
+  background: #111722;
+  color: #e8edf5;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45);
+}
+
+.leaflet-popup-tip {
+  background: #111722;
+}

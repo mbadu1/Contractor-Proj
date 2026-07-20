@@ -8,7 +8,7 @@ This is the MVP. Right now it runs on **fake but realistic data** for **US busin
 
 ---
 
-## Progress Memo (Phases 1–6)
+## Progress Memo (Phases 1–7)
 
 *Last updated: July 2026*
 
@@ -25,9 +25,10 @@ We've built the foundation. The system can now:
 3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good
 4. **Actually estimate revenue** from those clues — with a confidence score and range, not just a single number
 5. **Check its own homework** and **run on a schedule** without someone babysitting it
-6. **Serve it over an API** so other apps (and eventually the dashboard) can query estimates
+6. **Serve it over an API** so other apps (and the dashboard) can query estimates
+7. **Show it in a dashboard** — maps, charts, and model health you can click through
 
-We have **not** built the dashboard yet. That's Phase 7.
+**MVP complete.** Next steps would be real data adapters, hardening, and production deploy.
 
 ---
 
@@ -181,63 +182,89 @@ There's a stub API-key gate (`X-API-Key` / `REVWATCH_API_KEY`). Leave the env va
 
 ---
 
-### What's next
+### Phase 7 — The control room (done)
+
+A dark, data-dense Next.js dashboard sits on top of the API. Four pages:
+
+| Page | What you see |
+|------|----------------|
+| **Market Overview** | US city density map (Leaflet), revenue-by-category bars, HHI, growth leaders |
+| **Business Explorer** | Search/filter table → detail with time series, confidence badge, signal contribution waterfall |
+| **Comparisons** | Pick 2–4 businesses or categories; indexed growth curves (base = 100) |
+| **Model Health** | MAPE by size tier, calibration chart, category segment table — proves estimates are validated |
+
+Hard rule: **every estimate shows a confidence interval and score** — never a bare dollar figure alone.
+
+Also shipped:
+- `make demo` — generates data if needed, starts API + dashboard
+- `docker compose` — api + dashboard + scheduler
+
+**In plain terms:** You can click around the product and see revenue guesses with honesty about uncertainty, plus proof the model was checked.
+
+---
+
+### Status
 
 | Phase | What it does | Status |
 |-------|-------------|--------|
-| 4 | Estimation engine — guess revenue from signals | Done |
-| 5 | Validation + autonomous scheduled runs | Done |
-| 6 | API (FastAPI) | Done |
-| 7 | Dashboard (Next.js) | Not started |
+| 1 | Core domain + DuckDB storage | Done |
+| 2 | Signal adapters | Done |
+| 3 | Synthetic US universe | Done |
+| 4 | Estimation engine | Done |
+| 5 | Validation + autonomous scheduler | Done |
+| 6 | FastAPI | Done |
+| 7 | Next.js dashboard | Done |
 
-The end goal is `make demo` — one command that generates data, trains the model, and serves the API + dashboard.
+One-command demo: `make demo` → data + API (`:8000`) + dashboard (`:3000`).
 
 ---
 
 ## Running what exists today
 
 ```bash
-# Install dependencies
+# Install dependencies (Python + dashboard npm)
 make install
 
 # Run all tests
 make test
 
-# Phase demos
-make phase1-demo    # Business dedup + database storage
-make phase2-demo    # Signal adapters on sample US businesses
-make phase3-quick   # Generate 500-business US universe (~70s)
-make phase3-demo    # Full 5,000-business US universe (~10 min)
-make phase4-demo    # Train estimator + produce estimates (~3 min)
-make phase4-full    # Same on full dataset if already generated
-make phase5-demo    # Validate + run one autonomous cycle (~3 min)
-make phase6-demo    # Smoke-test API endpoints
-make api            # Serve API at http://127.0.0.1:8000 (docs at /docs)
-make scheduler      # Start long-running APScheduler loop
+# One-command demo (data if needed → API :8000 → dashboard :3000)
+make demo
+
+# Or piece by piece
+make api            # http://127.0.0.1:8000/docs
+make dashboard      # http://127.0.0.1:3000
+make scheduler      # autonomous loop
+
+# Docker (api + dashboard + scheduler)
+make docker-up
+make docker-down
 ```
 
 Generated data lands in `data/revwatch.duckdb`.
 
 ---
 
-## Project structure (so far)
+## Project structure
 
 ```
-core/             Domain models + entity resolution (dedup)
-adapters/         Pluggable signal sources (6 synthetic adapters)
-simulation/       Fake US business universe + hidden revenue generator
-engine/           Features, confidence, LightGBM estimator, validation
-orchestration/    APScheduler jobs (ingest / re-estimate / retrain gate)
-api/              FastAPI app (businesses, markets, rankings, validation)
-db/               DuckDB schema + repository layer
-scripts/          Phase demo scripts
-tests/            Unit tests
+core/             Domain models + entity resolution
+adapters/         Pluggable signal sources
+simulation/       Fake US business universe + hidden revenue
+engine/           Features, estimator, validation
+orchestration/    APScheduler autonomous jobs
+api/              FastAPI
+dashboard/        Next.js 14 + Tailwind + Recharts + Leaflet
+db/               DuckDB schema + repository
+scripts/          Phase demos + make demo
+docker-compose.yml
+tests/
 ```
 
 ---
 
-## Tech stack (planned)
+## Tech stack
 
-- **Python 3.11** — FastAPI, Pydantic, DuckDB, LightGBM, scikit-learn
-- **Next.js 14** — Dashboard (not built yet)
-- **Docker Compose** — One-command deployment (not built yet)
+- **Python 3.11** — FastAPI, Pydantic, DuckDB, LightGBM, scikit-learn, APScheduler
+- **Next.js 14** — Tailwind, Recharts, Leaflet
+- **Docker Compose** — api + dashboard + scheduler
