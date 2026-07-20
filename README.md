@@ -6,6 +6,8 @@ Instead of waiting for companies to report their revenue (which most small busin
 
 This is the MVP. Right now it runs on **fake but realistic data** for **US businesses only**. The architecture is built so we can swap in real data sources later without rebuilding the core system.
 
+**How to use it:** see [USER_MANUAL.md](USER_MANUAL.md) — startup, dashboard walkthrough, and how to read estimates.
+
 ---
 
 ## Progress Memo (Phases 1–7)

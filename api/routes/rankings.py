@@ -15,6 +15,8 @@ router = APIRouter(tags=["rankings"])
 
 
 def _prev_period(period: str) -> str:
+    if len(period) < 7 or period[4] != "-":
+        raise ValueError(f"Invalid period for rankings: {period!r}")
     y, m = int(period[:4]), int(period[5:7])
     m -= 1
     if m == 0:

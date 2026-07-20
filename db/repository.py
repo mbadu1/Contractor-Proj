@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 from uuid import UUID
 
 import duckdb
@@ -25,18 +26,77 @@ from core.models import (
 from db.schema import ALL_DDL
 
 
+class _MaterializedResult:
+    """Snapshot of query rows so fetch happens under the same lock as execute."""
+
+    def __init__(self, rows: list[tuple]) -> None:
+        self._rows = rows
+        self._idx = 0
+
+    def fetchone(self) -> tuple | None:
+        if self._idx >= len(self._rows):
+            return None
+        row = self._rows[self._idx]
+        self._idx += 1
+        return row
+
+    def fetchall(self) -> list[tuple]:
+        rows = self._rows[self._idx :]
+        self._idx = len(self._rows)
+        return rows
+
+
+class _ThreadSafeConnection:
+    """
+    Serialize DuckDB access.
+
+    DuckDB connections are not safe for concurrent use. FastAPI runs sync
+    endpoints in a threadpool, so parallel dashboard requests must lock.
+    """
+
+    def __init__(self, conn: duckdb.DuckDBPyConnection, lock: threading.RLock) -> None:
+        self._conn = conn
+        self._lock = lock
+
+    def execute(self, query: str, params: Any = None) -> _MaterializedResult:
+        with self._lock:
+            if params is None:
+                rel = self._conn.execute(query)
+            else:
+                rel = self._conn.execute(query, params)
+            return _MaterializedResult(rel.fetchall())
+
+    def executemany(self, query: str, params: Any) -> None:
+        with self._lock:
+            self._conn.executemany(query, params)
+
+    def commit(self) -> None:
+        with self._lock:
+            self._conn.commit()
+
+    def rollback(self) -> None:
+        with self._lock:
+            self._conn.rollback()
+
+    def close(self) -> None:
+        with self._lock:
+            self._conn.close()
+
+
 class RevWatchRepository:
     """Analytical storage backed by a single DuckDB file."""
 
     def __init__(self, db_path: str | Path = "data/revwatch.duckdb") -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn: duckdb.DuckDBPyConnection | None = None
+        self._conn: _ThreadSafeConnection | None = None
+        self._lock = threading.RLock()
 
     @property
-    def conn(self) -> duckdb.DuckDBPyConnection:
+    def conn(self) -> _ThreadSafeConnection:
         if self._conn is None:
-            self._conn = duckdb.connect(str(self.db_path))
+            raw = duckdb.connect(str(self.db_path))
+            self._conn = _ThreadSafeConnection(raw, self._lock)
             self.initialize()
         return self._conn
 

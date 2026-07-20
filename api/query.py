@@ -53,12 +53,19 @@ def latest_period(repo: RevWatchRepository, model_version: str) -> str | None:
         """
         SELECT period FROM revenue_estimates
         WHERE model_version = ?
+          AND period LIKE '____-__'
         ORDER BY period DESC
         LIMIT 1
         """,
         [model_version],
     ).fetchone()
-    return str(row[0]) if row else None
+    if not row:
+        return None
+    period = str(row[0])
+    # Guard against corrupted concurrent reads (should not happen with locked conn)
+    if len(period) != 7 or period[4] != "-" or not period[:4].isdigit():
+        return None
+    return period
 
 
 def get_latest_estimate_out(

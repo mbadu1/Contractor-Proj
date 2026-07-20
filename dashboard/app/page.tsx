@@ -3,19 +3,30 @@ import { DensityMapClient } from "@/components/DensityMapClient";
 import { ErrorState, Panel, Stat } from "@/components/Panel";
 import { fetchMarketSummary, fetchRankings } from "@/lib/api";
 import { fmtPct, fmtUsd, labelCategory } from "@/lib/format";
+import type { MarketSummary, Rankings } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketOverviewPage() {
-  let market;
-  let rankings;
+  let market: MarketSummary | null = null;
+  let rankings: Rankings | null = null;
+  let error: string | null = null;
+
   try {
-    [market, rankings] = await Promise.all([
-      fetchMarketSummary("US"),
-      fetchRankings(8),
-    ]);
+    market = await fetchMarketSummary("US");
   } catch (e) {
-    return <ErrorState message={e instanceof Error ? e.message : String(e)} />;
+    error = e instanceof Error ? e.message : String(e);
+  }
+
+  try {
+    rankings = await fetchRankings(8);
+  } catch {
+    // Rankings are supplemental — don't block the whole page
+    rankings = null;
+  }
+
+  if (!market) {
+    return <ErrorState message={error || "No market data"} />;
   }
 
   return (
@@ -61,30 +72,38 @@ export default async function MarketOverviewPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Panel title="Top cities by estimated revenue">
-          <ul className="divide-y divide-ink-600">
-            {rankings.top_cities_by_revenue.map((r, i) => (
-              <li key={r.key} className="flex items-center justify-between py-2 text-sm">
-                <span className="text-mist-300">
-                  <span className="mr-2 font-mono text-mist-400">{i + 1}.</span>
-                  {r.label}
-                </span>
-                <span className="font-mono text-mist-100">{fmtUsd(r.value, true)}</span>
-              </li>
-            ))}
-          </ul>
+          {rankings ? (
+            <ul className="divide-y divide-ink-600">
+              {rankings.top_cities_by_revenue.map((r, i) => (
+                <li key={r.key} className="flex items-center justify-between py-2 text-sm">
+                  <span className="text-mist-300">
+                    <span className="mr-2 font-mono text-mist-400">{i + 1}.</span>
+                    {r.label}
+                  </span>
+                  <span className="font-mono text-mist-100">{fmtUsd(r.value, true)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-mist-400">Rankings unavailable</p>
+          )}
         </Panel>
         <Panel title="Growth leaders (MoM %)" subtitle="Indexed on latest vs prior month point estimates">
-          <ul className="divide-y divide-ink-600">
-            {rankings.growth_leaders.map((r) => (
-              <li key={r.key} className="flex items-center justify-between py-2 text-sm">
-                <span className="truncate text-mist-300">{r.label}</span>
-                <span className="font-mono text-good">
-                  {r.value >= 0 ? "+" : ""}
-                  {fmtPct(r.value)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          {rankings ? (
+            <ul className="divide-y divide-ink-600">
+              {rankings.growth_leaders.map((r) => (
+                <li key={r.key} className="flex items-center justify-between py-2 text-sm">
+                  <span className="truncate text-mist-300">{r.label}</span>
+                  <span className="font-mono text-good">
+                    {r.value >= 0 ? "+" : ""}
+                    {fmtPct(r.value)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-mist-400">Rankings unavailable</p>
+          )}
         </Panel>
       </div>
     </div>
