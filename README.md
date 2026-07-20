@@ -8,7 +8,7 @@ This is the MVP. Right now it runs on **fake but realistic data** for **US busin
 
 ---
 
-## Progress Memo (Phases 1–3)
+## Progress Memo (Phases 1–4)
 
 *Last updated: July 2026*
 
@@ -22,9 +22,10 @@ We've built the foundation. The system can now:
 
 1. Keep track of US businesses (who they are, where they are, what they do)
 2. Pull in "signal" data from multiple sources (stand-ins for real-world clues)
-3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good later
+3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good
+4. **Actually estimate revenue** from those clues — with a confidence score and range, not just a single number
 
-We have **not** built the actual revenue-guessing engine yet. That's Phase 4.
+We have **not** built the API, dashboard, or autonomous scheduler yet. That's Phases 5–7.
 
 ---
 
@@ -55,7 +56,7 @@ Real revenue data doesn't exist yet. So we built **signal adapters** — plug-in
 | Supplier flow | Shipment/procurement volume |
 | Utility proxy | Opening hours, energy usage intensity |
 
-Each adapter has a simple contract: give it a region and a date range, it returns observations. The estimation engine (coming in Phase 4) will only ever see those observations — it won't care whether they came from fake data or a real Visa feed.
+Each adapter has a simple contract: give it a region and a date range, it returns observations. The estimation engine only ever sees those observations — it doesn't care whether they came from fake data or a real Visa feed.
 
 The fake data is designed to feel real:
 - E-commerce businesses show ~95% of revenue in payment signals; cash-heavy informal shops show ~20%
