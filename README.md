@@ -2,7 +2,7 @@
 
 **RevWatch** is a system that tries to figure out how much money businesses are making without asking them directly.
 
-Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate  and we're honest about how confident we are in each number.
+Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate, and we're honest about how confident we are in each number.
 
 This is the MVP. Right now it runs on **fake but realistic data** for **US businesses only**. The architecture is built so we can swap in real data sources later without rebuilding the core system.
 
@@ -85,7 +85,37 @@ Quick-run results (500 US businesses):
 - Payment signals correlate strongly with true revenue — the clues actually relate to the hidden answer
 - Cash-heavy informal retailers have sparser payment signals than e-commerce businesses, as intended
 
-**In plain terms:** We built a practice test with known answers, so when we build the revenue estimator we can check its homework.
+**In plain terms:** We built a practice test with known answers, so we can check the estimator's homework.
+
+---
+
+### Phase 4 — The revenue guesser (done)
+
+This is the brain. It takes all those clues and produces a revenue estimate for every business, every month.
+
+How it works, in plain English:
+
+1. **Feature builder** — Crunches signals into a spreadsheet-style row per business per month: payment volume, review velocity, how many clue types are missing, growth vs last month, how this business compares to others in the same category, etc.
+
+2. **Training on a lucky few** — In the real world, almost nobody publishes their revenue. We simulate the ~8% of businesses whose revenue is "known" (like public filings). Those are biased toward big companies — we correct for that with reweighting so the model doesn't only learn to predict Walmart-sized businesses.
+
+3. **Machine learning ensemble** — Three LightGBM models predict the 10th, 50th, and 90th percentile of revenue. That gives us a point estimate (the middle) and a range (the low and high bounds).
+
+4. **Shrinkage for sparse clues** — If a business has very few signals, we don't trust the model blindly. We pull the estimate toward a sensible default for that category and size tier.
+
+5. **Confidence score** — Every estimate gets a 0–100 score based on how much data we had, how well the clues agreed with each other, and how wide the uncertainty range is.
+
+6. **Explainability** — Each estimate includes which clue types contributed most (payments, reviews, etc.).
+
+The estimator itself **never peeks at the answer key**. Only the training pipeline touches hidden true revenue, and only for those ~8% labeled businesses.
+
+Quick-run results (500 US businesses):
+- 40 businesses used for training (8%, biased toward enterprise)
+- 12,000 revenue estimates produced
+- Holdout MAPE ~28% on businesses the model wasn't trained on
+- Average confidence score ~69/100
+
+**In plain terms:** We can now guess revenue from clues, say how sure we are, and show our work.
 
 ---
 
@@ -93,7 +123,7 @@ Quick-run results (500 US businesses):
 
 | Phase | What it does | Status |
 |-------|-------------|--------|
-| 4 | Estimation engine — actually guess revenue from signals | Not started |
+| 4 | Estimation engine — guess revenue from signals | Done |
 | 5 | Validation + autonomous scheduled runs | Not started |
 | 6 | API (FastAPI) | Not started |
 | 7 | Dashboard (Next.js) | Not started |
@@ -116,6 +146,8 @@ make phase1-demo    # Business dedup + database storage
 make phase2-demo    # Signal adapters on sample US businesses
 make phase3-quick   # Generate 500-business US universe (~70s)
 make phase3-demo    # Full 5,000-business US universe (~10 min)
+make phase4-demo    # Train estimator + produce estimates (~3 min)
+make phase4-full    # Same on full dataset if already generated
 ```
 
 Generated data lands in `data/revwatch.duckdb`.
@@ -128,6 +160,7 @@ Generated data lands in `data/revwatch.duckdb`.
 core/           Domain models + entity resolution (dedup)
 adapters/       Pluggable signal sources (6 synthetic adapters)
 simulation/     Fake US business universe + hidden revenue generator
+engine/         Feature builder, confidence scoring, LightGBM estimator
 db/             DuckDB schema + repository layer
 scripts/        Phase demo scripts
 tests/          Unit tests
