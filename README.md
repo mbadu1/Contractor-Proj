@@ -1,8 +1,8 @@
 # RevWatch
 
-**RevWatch** is a system that tries to figure out how much money businesses are making — without asking them directly.
+**RevWatch** is a system that tries to figure out how much money businesses are making without asking them directly.
 
-Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate — and we're honest about how confident we are in each number.
+Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate  and we're honest about how confident we are in each number.
 
 This is the MVP. Right now it runs on **fake but realistic data** for **US businesses only**. The architecture is built so we can swap in real data sources later without rebuilding the core system.
 
