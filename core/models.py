@@ -186,3 +186,41 @@ class TrueRevenue(BaseModel):
     trend_factor: float = Field(default=1.0, ge=0.0)
     seasonal_factor: float = Field(default=1.0, ge=0.0)
     shock_factor: float = Field(default=1.0, ge=0.0)
+
+
+class SegmentMetrics(BaseModel):
+    """Validation metrics for one segment (category / size / city, etc.)."""
+
+    segment_type: str
+    segment_value: str
+    n_observations: int
+    mape: float
+    interval_coverage: float
+    median_ape: float
+    mean_confidence: float
+
+
+class CalibrationBin(BaseModel):
+    """One bin of confidence-vs-accuracy calibration data."""
+
+    confidence_bin_low: float
+    confidence_bin_high: float
+    n_observations: int
+    mean_confidence: float
+    mape: float
+    interval_coverage: float
+
+
+class ValidationReport(BaseModel):
+    """Persisted model health report for a model_version."""
+
+    model_version: str
+    n_observations: int
+    mape: float
+    median_ape: float
+    interval_coverage: float
+    mean_confidence: float
+    segment_metrics: list[SegmentMetrics] = Field(default_factory=list)
+    calibration: list[CalibrationBin] = Field(default_factory=list)
+    promoted: bool = False
+    notes: str = ""

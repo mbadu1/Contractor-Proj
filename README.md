@@ -8,7 +8,7 @@ This is the MVP. Right now it runs on **fake but realistic data** for **US busin
 
 ---
 
-## Progress Memo (Phases 1–4)
+## Progress Memo (Phases 1–5)
 
 *Last updated: July 2026*
 
@@ -24,8 +24,9 @@ We've built the foundation. The system can now:
 2. Pull in "signal" data from multiple sources (stand-ins for real-world clues)
 3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good
 4. **Actually estimate revenue** from those clues — with a confidence score and range, not just a single number
+5. **Check its own homework** and **run on a schedule** without someone babysitting it
 
-We have **not** built the API, dashboard, or autonomous scheduler yet. That's Phases 5–7.
+We have **not** built the API or dashboard yet. That's Phases 6–7.
 
 ---
 
@@ -119,12 +120,47 @@ Quick-run results (500 US businesses):
 
 ---
 
+### Phase 5 — The report card + autopilot (done)
+
+Two big pieces landed here.
+
+**Validation (the report card)**
+After we produce estimates, we compare them to the hidden answer key (`true_revenue`) — but only for this check, never during guessing. We measure:
+
+- **MAPE** — how far off our guesses are on average (as a %)
+- **Interval coverage** — how often the true revenue falls inside our low–high range
+- **Calibration** — whether high-confidence estimates are actually more accurate
+- **Segments** — the same metrics broken down by category, size tier, and city
+
+Every model version gets a saved validation report so we can see if a new model is better or worse.
+
+**Autonomous loop (the autopilot)**
+A scheduler runs three jobs without anyone clicking buttons:
+
+| Cadence | Job | What it does |
+|---------|-----|--------------|
+| Daily | Signal ingestion | Pull fresh clues from all adapters |
+| Weekly | Re-estimation | Re-run revenue estimates with the current promoted model |
+| Monthly | Retrain + gate | Train a new candidate model, validate it, **only promote if MAPE doesn't get worse by more than 5%** |
+
+If the new model is worse than the ceiling, it gets rejected and the old one stays live. All runs are logged.
+
+Quick-run results (500 US businesses):
+- Holdout MAPE ~27.6%, median error ~16.7%
+- Medium businesses easiest (~12% MAPE); micro hardest (~37%)
+- Higher confidence bins → lower MAPE (calibration works in the right direction)
+- Candidate `v0.2.demo` promoted: MAPE stayed within the 5% gate
+
+**In plain terms:** The system grades itself, and it only ships a new model if the grade doesn't get meaningfully worse.
+
+---
+
 ### What's next
 
 | Phase | What it does | Status |
 |-------|-------------|--------|
 | 4 | Estimation engine — guess revenue from signals | Done |
-| 5 | Validation + autonomous scheduled runs | Not started |
+| 5 | Validation + autonomous scheduled runs | Done |
 | 6 | API (FastAPI) | Not started |
 | 7 | Dashboard (Next.js) | Not started |
 
@@ -148,6 +184,8 @@ make phase3-quick   # Generate 500-business US universe (~70s)
 make phase3-demo    # Full 5,000-business US universe (~10 min)
 make phase4-demo    # Train estimator + produce estimates (~3 min)
 make phase4-full    # Same on full dataset if already generated
+make phase5-demo    # Validate + run one autonomous cycle (~3 min)
+make scheduler      # Start long-running APScheduler loop
 ```
 
 Generated data lands in `data/revwatch.duckdb`.
@@ -157,13 +195,14 @@ Generated data lands in `data/revwatch.duckdb`.
 ## Project structure (so far)
 
 ```
-core/           Domain models + entity resolution (dedup)
-adapters/       Pluggable signal sources (6 synthetic adapters)
-simulation/     Fake US business universe + hidden revenue generator
-engine/         Feature builder, confidence scoring, LightGBM estimator
-db/             DuckDB schema + repository layer
-scripts/        Phase demo scripts
-tests/          Unit tests
+core/             Domain models + entity resolution (dedup)
+adapters/         Pluggable signal sources (6 synthetic adapters)
+simulation/       Fake US business universe + hidden revenue generator
+engine/           Features, confidence, LightGBM estimator, validation
+orchestration/    APScheduler jobs (ingest / re-estimate / retrain gate)
+db/               DuckDB schema + repository layer
+scripts/          Phase demo scripts
+tests/            Unit tests
 ```
 
 ---

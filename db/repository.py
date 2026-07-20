@@ -20,6 +20,7 @@ from core.models import (
     SignalType,
     SizeTier,
     TrueRevenue,
+    ValidationReport,
 )
 from db.schema import ALL_DDL
 
@@ -420,6 +421,170 @@ class RevWatchRepository:
         return int(row[0]) if row else 0
 
     # ------------------------------------------------------------------
+    # Validation reports / model registry / pipeline runs
+    # ------------------------------------------------------------------
+
+    def insert_validation_report(self, report: ValidationReport) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO validation_reports (
+                model_version, n_observations, mape, median_ape,
+                interval_coverage, mean_confidence, segment_metrics,
+                calibration, promoted, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                report.model_version,
+                report.n_observations,
+                report.mape,
+                report.median_ape,
+                report.interval_coverage,
+                report.mean_confidence,
+                json.dumps([s.model_dump() for s in report.segment_metrics]),
+                json.dumps([c.model_dump() for c in report.calibration]),
+                report.promoted,
+                report.notes,
+            ],
+        )
+
+    def get_latest_validation_report(
+        self, model_version: str | None = None
+    ) -> ValidationReport | None:
+        if model_version:
+            row = self.conn.execute(
+                """
+                SELECT model_version, n_observations, mape, median_ape,
+                       interval_coverage, mean_confidence, segment_metrics,
+                       calibration, promoted, notes
+                FROM validation_reports
+                WHERE model_version = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                [model_version],
+            ).fetchone()
+        else:
+            row = self.conn.execute(
+                """
+                SELECT model_version, n_observations, mape, median_ape,
+                       interval_coverage, mean_confidence, segment_metrics,
+                       calibration, promoted, notes
+                FROM validation_reports
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return self._row_to_validation_report(row) if row else None
+
+    def get_promoted_model_mape(self) -> float | None:
+        row = self.conn.execute(
+            """
+            SELECT mape FROM model_registry
+            WHERE status = 'promoted'
+            ORDER BY promoted_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        return float(row[0]) if row and row[0] is not None else None
+
+    def get_promoted_model_version(self) -> str | None:
+        row = self.conn.execute(
+            """
+            SELECT model_version FROM model_registry
+            WHERE status = 'promoted'
+            ORDER BY promoted_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    def register_model(
+        self,
+        model_version: str,
+        *,
+        status: str,
+        mape: float | None = None,
+        notes: str = "",
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO model_registry (model_version, status, mape, notes, promoted_at)
+            VALUES (?, ?, ?, ?, CASE WHEN ? = 'promoted' THEN now() ELSE NULL END)
+            ON CONFLICT (model_version) DO UPDATE SET
+                status = excluded.status,
+                mape = excluded.mape,
+                notes = excluded.notes,
+                promoted_at = CASE
+                    WHEN excluded.status = 'promoted' THEN now()
+                    ELSE model_registry.promoted_at
+                END
+            """,
+            [model_version, status, mape, notes, status],
+        )
+
+    def demote_other_models(self, keep_version: str) -> None:
+        self.conn.execute(
+            """
+            UPDATE model_registry
+            SET status = 'retired'
+            WHERE model_version != ? AND status = 'promoted'
+            """,
+            [keep_version],
+        )
+
+    def log_pipeline_run(
+        self,
+        job_name: str,
+        status: str,
+        started_at: datetime,
+        finished_at: datetime | None = None,
+        details: dict | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO pipeline_runs (
+                job_name, status, started_at, finished_at, details, error_message
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                job_name,
+                status,
+                started_at,
+                finished_at,
+                json.dumps(details or {}),
+                error_message,
+            ],
+        )
+
+    def list_pipeline_runs(self, limit: int = 20) -> list[dict]:
+        rows = self.conn.execute(
+            """
+            SELECT job_name, status, started_at, finished_at, details, error_message
+            FROM pipeline_runs
+            ORDER BY started_at DESC
+            LIMIT ?
+            """,
+            [limit],
+        ).fetchall()
+        out = []
+        for r in rows:
+            details = r[4]
+            if isinstance(details, str):
+                details = json.loads(details)
+            out.append(
+                {
+                    "job_name": r[0],
+                    "status": r[1],
+                    "started_at": r[2],
+                    "finished_at": r[3],
+                    "details": details,
+                    "error_message": r[5],
+                }
+            )
+        return out
+
+    # ------------------------------------------------------------------
     # Row mappers
     # ------------------------------------------------------------------
 
@@ -451,6 +616,29 @@ class RevWatchRepository:
             timestamp=row[3],
             source=row[4],
             reliability=row[5],
+        )
+
+    @staticmethod
+    def _row_to_validation_report(row: tuple) -> ValidationReport:
+        from core.models import CalibrationBin, SegmentMetrics
+
+        segments_raw = row[6]
+        calibration_raw = row[7]
+        if isinstance(segments_raw, str):
+            segments_raw = json.loads(segments_raw)
+        if isinstance(calibration_raw, str):
+            calibration_raw = json.loads(calibration_raw)
+        return ValidationReport(
+            model_version=row[0],
+            n_observations=int(row[1]),
+            mape=float(row[2]),
+            median_ape=float(row[3]),
+            interval_coverage=float(row[4]),
+            mean_confidence=float(row[5]),
+            segment_metrics=[SegmentMetrics(**s) for s in segments_raw],
+            calibration=[CalibrationBin(**c) for c in calibration_raw],
+            promoted=bool(row[8]),
+            notes=row[9] or "",
         )
 
     @staticmethod

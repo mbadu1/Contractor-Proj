@@ -1,4 +1,4 @@
-.PHONY: install test phase1-demo phase2-demo
+.PHONY: install test phase1-demo phase2-demo phase3-demo phase3-quick phase4-demo phase4-full phase5-demo scheduler
 
 PYTHONPATH ?= .
 
@@ -25,3 +25,9 @@ phase4-demo:
 
 phase4-full:
 	PYTHONPATH=$(PYTHONPATH) python scripts/phase4_demo.py
+
+phase5-demo:
+	PYTHONPATH=$(PYTHONPATH) python scripts/phase5_demo.py --quick
+
+scheduler:
+	PYTHONPATH=$(PYTHONPATH) python -m orchestration.scheduler
