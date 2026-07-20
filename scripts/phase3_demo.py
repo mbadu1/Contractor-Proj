@@ -24,7 +24,7 @@ def main() -> None:
     n = 500 if args.quick else args.businesses
     db_path = Path(args.db)
 
-    print("=== Phase 3 Demo: Synthetic Ground Truth Generator ===\n")
+    print("=== Phase 3 Demo: Synthetic Ground Truth Generator (US) ===\n")
     print(f"Generating {n:,} businesses × 24 months …")
 
     config = GeneratorConfig(n_businesses=n, db_path=db_path, seed=42)
@@ -37,8 +37,8 @@ def main() -> None:
     repo = RevenueLensRepository(db_path)
 
     # Business distribution
-    by_country = repo.conn.execute(
-        "SELECT country, COUNT(*) FROM businesses GROUP BY country ORDER BY 2 DESC"
+    by_city = repo.conn.execute(
+        "SELECT city, COUNT(*) FROM businesses GROUP BY city ORDER BY 2 DESC LIMIT 8"
     ).fetchall()
     by_category = repo.conn.execute(
         "SELECT category, COUNT(*) FROM businesses GROUP BY category ORDER BY 2 DESC LIMIT 8"
@@ -50,10 +50,13 @@ def main() -> None:
     print(f"True revenue records:      {repo.count_true_revenue():,}")
     print(f"Signal observations:       {result.signal_count:,}")
 
-    print("\n--- Businesses by Market ---")
-    for country, cnt in by_country:
+    print("\n--- US Businesses (all markets) ---")
+    print(f"  US: {len(result.businesses):,} (100%)")
+
+    print("\n--- Top US Cities ---")
+    for city, cnt in by_city:
         pct = 100 * cnt / len(result.businesses)
-        print(f"  {country}: {cnt:,} ({pct:.1f}%)")
+        print(f"  {city}: {cnt:,} ({pct:.1f}%)")
 
     print("\n--- Top Categories ---")
     for cat, cnt in by_category:
@@ -74,40 +77,31 @@ def main() -> None:
     print(f"  Mean:   ${rev_stats[1]:,.0f}")
     print(f"  Max:    ${rev_stats[2]:,.0f}")
 
-    # Revenue by country
-    print("\n--- Median True Revenue by Country ---")
+    print("\n--- Median True Revenue by City (top metros) ---")
     for row in repo.conn.execute(
         """
-        SELECT b.country, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tr.revenue)
+        SELECT b.city, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY tr.revenue)
         FROM true_revenue tr
         JOIN businesses b ON b.id = tr.business_id
-        GROUP BY b.country
+        GROUP BY b.city
         ORDER BY 2 DESC
+        LIMIT 6
         """
     ).fetchall():
         print(f"  {row[0]}: ${row[1]:,.0f}/mo")
 
-    # Signal coverage by country
-    print("\n--- Signal Coverage by Country ---")
-    for row in repo.conn.execute(
+    print("\n--- Signal Coverage (US overall) ---")
+    row = repo.conn.execute(
         """
-        SELECT b.country,
-               COUNT(DISTINCT s.business_id) AS biz_with_signals,
-               COUNT(*) AS obs,
-               AVG(s.reliability) AS avg_rel
+        SELECT COUNT(DISTINCT s.business_id), COUNT(*), AVG(s.reliability)
         FROM signal_observations s
-        JOIN businesses b ON b.id = s.business_id
-        GROUP BY b.country
-        ORDER BY b.country
         """
-    ).fetchall():
-        total = next(c for co, c in by_country if co == row[0])
-        cov = 100 * row[1] / total
-        print(f"  {row[0]}: {row[1]:,}/{total:,} businesses ({cov:.0f}%) | {row[2]:,} obs | rel={row[3]:.3f}")
+    ).fetchone()
+    cov = 100 * row[0] / len(result.businesses)
+    print(f"  {row[0]:,}/{len(result.businesses):,} businesses ({cov:.0f}%) | {row[1]:,} obs | rel={row[2]:.3f}")
 
-    # Payment signal sparsity GH vs US
-    print("\n--- Payment Signal Sparsity (GH vs US) ---")
-    for country in ("GH", "US"):
+    print("\n--- Payment Signal Sparsity (informal vs ecommerce) ---")
+    for category in ("informal_retail", "ecommerce_pure_play"):
         row = repo.conn.execute(
             """
             SELECT
@@ -115,12 +109,12 @@ def main() -> None:
                 COUNT(DISTINCT b.id)
             FROM businesses b
             LEFT JOIN signal_observations s ON s.business_id = b.id
-            WHERE b.country = ?
+            WHERE b.category = ?
             """,
-            [country],
+            [category],
         ).fetchone()
         pct = 100 * row[0] / row[1] if row[1] else 0
-        print(f"  {country}: {row[0]:,}/{row[1]:,} businesses with payment_volume ({pct:.0f}%)")
+        print(f"  {category}: {row[0]:,}/{row[1]:,} with payment_volume ({pct:.0f}%)")
 
     # Revenue-signal correlation sample
     print("\n--- Revenue ↔ Payment Volume Correlation (sample) ---")

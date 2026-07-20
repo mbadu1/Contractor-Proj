@@ -75,44 +75,38 @@ class TestSyntheticUniverseGenerator:
             assert repo.count_true_revenue() == 120 * 24
             repo.close()
 
-    def test_market_distribution_approximate(self) -> None:
+    def test_all_businesses_are_us(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "test.duckdb"
             config = GeneratorConfig(n_businesses=1000, db_path=db, seed=7)
             result = SyntheticUniverseGenerator(config).run()
             counts = Counter(b.country for b in result.businesses)
-            assert counts["US"] > counts["GH"]
-            assert counts["GB"] > counts["GH"]
+            assert counts == {"US": 1000}
 
-    def test_ghana_has_sparser_payment_signals(self) -> None:
+    def test_informal_retail_has_sparser_payment_signals(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "test.duckdb"
             config = GeneratorConfig(n_businesses=300, db_path=db, seed=11)
             SyntheticUniverseGenerator(config).run()
             repo = RevenueLensRepository(db)
 
-            def payment_biz_count(country: str) -> int:
+            def payment_rate(category: str) -> float:
                 row = repo.conn.execute(
                     """
-                    SELECT COUNT(DISTINCT s.business_id)
-                    FROM signal_observations s
-                    JOIN businesses b ON b.id = s.business_id
-                    WHERE b.country = ? AND s.signal_type = 'payment_volume'
+                    SELECT
+                        COUNT(DISTINCT CASE WHEN s.signal_type = 'payment_volume' THEN b.id END),
+                        COUNT(DISTINCT b.id)
+                    FROM businesses b
+                    LEFT JOIN signal_observations s ON s.business_id = b.id
+                    WHERE b.category = ?
                     """,
-                    [country],
+                    [category],
                 ).fetchone()
-                return int(row[0])
+                return row[0] / max(1, row[1])
 
-            total_gh = repo.conn.execute(
-                "SELECT COUNT(*) FROM businesses WHERE country='GH'"
-            ).fetchone()[0]
-            total_us = repo.conn.execute(
-                "SELECT COUNT(*) FROM businesses WHERE country='US'"
-            ).fetchone()[0]
-
-            gh_rate = payment_biz_count("GH") / max(1, total_gh)
-            us_rate = payment_biz_count("US") / max(1, total_us)
-            assert us_rate > gh_rate
+            informal_rate = payment_rate("informal_retail")
+            ecom_rate = payment_rate("ecommerce_pure_play")
+            assert ecom_rate >= informal_rate
             repo.close()
 
     def test_true_revenue_persisted_separately(self) -> None:

@@ -4,7 +4,7 @@
 
 Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate — and we're honest about how confident we are in each number.
 
-This is the MVP. Right now it runs on **fake but realistic data**. The architecture is built so we can swap in real data sources later without rebuilding the core system.
+This is the MVP. Right now it runs on **fake but realistic data** for **US businesses only**. The architecture is built so we can swap in real data sources later without rebuilding the core system.
 
 ---
 
@@ -12,13 +12,17 @@ This is the MVP. Right now it runs on **fake but realistic data**. The architect
 
 *Last updated: July 2026*
 
+### Scope note
+
+**Everything is US-focused for now.** All synthetic businesses are in American cities (New York, Chicago, Austin, Miami, etc.). International expansion can come later — the code is structured to support it, but we're not building for other markets yet.
+
 ### The short version
 
 We've built the foundation. The system can now:
 
-1. Keep track of businesses (who they are, where they are, what they do)
+1. Keep track of US businesses (who they are, where they are, what they do)
 2. Pull in "signal" data from multiple sources (stand-ins for real-world clues)
-3. Generate a fake universe of ~5,000 businesses with known hidden revenue, so we can test whether our guesses are any good later
+3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good later
 
 We have **not** built the actual revenue-guessing engine yet. That's Phase 4.
 
@@ -54,8 +58,7 @@ Real revenue data doesn't exist yet. So we built **signal adapters** — plug-in
 Each adapter has a simple contract: give it a region and a date range, it returns observations. The estimation engine (coming in Phase 4) will only ever see those observations — it won't care whether they came from fake data or a real Visa feed.
 
 The fake data is designed to feel real:
-- E-commerce businesses show ~95% of revenue in payment signals; informal street vendors show ~20%
-- Ghana has sparser, less reliable signals than the US or UK
+- E-commerce businesses show ~95% of revenue in payment signals; cash-heavy informal shops show ~20%
 - Some signals are randomly missing (like real-world data gaps)
 - Each observation carries a reliability score
 
@@ -67,23 +70,19 @@ The fake data is designed to feel real:
 
 To know if our revenue guesses are any good, we need businesses where we *actually know* the answer. Phase 3 generates that.
 
-We created a synthetic universe of **~5,000 businesses** across three markets:
+We created a synthetic universe of **~5,000 US businesses** spread across 20 major metros (NYC, LA, Chicago, Houston, Austin, Miami, Denver, etc.).
 
-- **United States** (~55%)
-- **United Kingdom** (~25%)
-- **Ghana** (~20%)
-
-For each business, the system generates **24 months of hidden "true" revenue** using realistic statistical distributions (log-normal, parameterized by category, country, and size). The numbers have trend, seasonality, and occasional shocks — like a real business would.
+For each business, the system generates **24 months of hidden "true" revenue** using realistic statistical distributions (log-normal, parameterized by category and size). The numbers have trend, seasonality, and occasional shocks — like a real business would.
 
 Then we run all six signal adapters against that hidden revenue to produce the clue data the estimation engine will eventually consume.
 
 The true revenue is stored in a separate table (`true_revenue`) that the estimator is **never allowed to read**. It's only for validation — like an answer key kept in a locked drawer.
 
-Quick-run results (500 businesses):
+Quick-run results (500 US businesses):
 - 12,000 hidden revenue records
-- ~103,000 signal observations generated
-- Payment signals correlate with true revenue at **r = 0.92** — the clues actually relate to the hidden answer
-- Ghana businesses have sparser payment coverage and lower signal reliability, as intended
+- ~100,000+ signal observations generated
+- Payment signals correlate strongly with true revenue — the clues actually relate to the hidden answer
+- Cash-heavy informal retailers have sparser payment signals than e-commerce businesses, as intended
 
 **In plain terms:** We built a practice test with known answers, so when we build the revenue estimator we can check its homework.
 
@@ -108,14 +107,14 @@ The end goal is `make demo` — one command that generates data, trains the mode
 # Install dependencies
 make install
 
-# Run all tests (30 passing)
+# Run all tests
 make test
 
 # Phase demos
 make phase1-demo    # Business dedup + database storage
-make phase2-demo    # Signal adapters on sample businesses
-make phase3-quick   # Generate 500-business fake universe (~70s)
-make phase3-demo    # Full 5,000-business universe (~10 min)
+make phase2-demo    # Signal adapters on sample US businesses
+make phase3-quick   # Generate 500-business US universe (~70s)
+make phase3-demo    # Full 5,000-business US universe (~10 min)
 ```
 
 Generated data lands in `data/revenuelens.duckdb`.
@@ -127,7 +126,7 @@ Generated data lands in `data/revenuelens.duckdb`.
 ```
 core/           Domain models + entity resolution (dedup)
 adapters/       Pluggable signal sources (6 synthetic adapters)
-simulation/     Fake business universe + hidden revenue generator
+simulation/     Fake US business universe + hidden revenue generator
 db/             DuckDB schema + repository layer
 scripts/        Phase demo scripts
 tests/          Unit tests

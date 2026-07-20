@@ -25,14 +25,14 @@ from db.repository import RevenueLensRepository
 
 
 def _sample_businesses() -> list[Business]:
-    """Diverse businesses across US, GH, UK for adapter demo."""
+    """Diverse US businesses for adapter demo."""
     specs = [
         ("Fresh Basket Market", BusinessCategory.GROCERY_SUPERMARKET, "US", "New York", 40.7128, -74.0060, SizeTier.MEDIUM, [SalesChannel.PHYSICAL, SalesChannel.HYBRID]),
-        ("Kwame's Corner Shop", BusinessCategory.INFORMAL_RETAIL, "GH", "Accra", 5.6037, -0.1870, SizeTier.MICRO, [SalesChannel.PHYSICAL]),
+        ("Main Street Corner Shop", BusinessCategory.INFORMAL_RETAIL, "US", "Columbus", 39.9612, -82.9988, SizeTier.MICRO, [SalesChannel.PHYSICAL]),
         ("TechNova Online", BusinessCategory.ECOMMERCE_PURE_PLAY, "US", "Austin", 30.2672, -97.7431, SizeTier.SMALL, [SalesChannel.ECOMMERCE]),
-        ("The Crown Pub", BusinessCategory.RESTAURANT_CAFE, "GB", "London", 51.5074, -0.1278, SizeTier.SMALL, [SalesChannel.PHYSICAL]),
+        ("The Crown Pub", BusinessCategory.RESTAURANT_CAFE, "US", "Boston", 42.3601, -71.0589, SizeTier.SMALL, [SalesChannel.PHYSICAL]),
         ("BuildRight Wholesale", BusinessCategory.WHOLESALE_DISTRIBUTION, "US", "Chicago", 41.8781, -87.6298, SizeTier.LARGE, [SalesChannel.HYBRID]),
-        ("Accra Tech Hub", BusinessCategory.ELECTRONICS_RETAIL, "GH", "Accra", 5.5560, -0.1969, SizeTier.SMALL, [SalesChannel.HYBRID]),
+        ("Denver Tech Hub", BusinessCategory.ELECTRONICS_RETAIL, "US", "Denver", 39.7392, -104.9903, SizeTier.SMALL, [SalesChannel.HYBRID]),
     ]
     return [
         Business(
@@ -51,7 +51,7 @@ def _sample_businesses() -> list[Business]:
 
 
 def main() -> None:
-    print("=== Phase 2 Demo: Signal Adapters ===\n")
+    print("=== Phase 2 Demo: Signal Adapters (US) ===\n")
 
     businesses = _sample_businesses()
     catalog = InMemoryBusinessCatalog(businesses)
@@ -59,13 +59,12 @@ def main() -> None:
     adapters = create_default_adapters(catalog, config=config, seed=42)
 
     since = datetime(2025, 1, 1, tzinfo=timezone.utc)
-    region = RegionFilter()  # all businesses
+    region = RegionFilter()
 
     print(f"Adapters registered:       {len(adapters)}")
     for a in adapters:
         print(f"  • {a.source_name}")
 
-    # Fetch per adapter
     print(f"\nFetching signals since {since.date()} …")
     per_adapter: dict[str, list] = {}
     for adapter in adapters:
@@ -76,7 +75,6 @@ def main() -> None:
     merged = fetch_all_adapters(adapters, region, since)
     print(f"\nTotal observations:        {len(merged.observations)}")
 
-    # Coverage by business
     by_biz: dict = defaultdict(set)
     for o in merged.observations:
         by_biz[o.business_id].add(o.signal_type.value)
@@ -85,10 +83,9 @@ def main() -> None:
     biz_map = {b.id: b for b in businesses}
     for bid, signals in sorted(by_biz.items(), key=lambda x: -len(x[1])):
         b = biz_map[bid]
-        print(f"  {b.name:25s} ({b.country}) → {len(signals):2d} signal types")
+        print(f"  {b.name:25s} ({b.city}, US) → {len(signals):2d} signal types")
 
-    # Payment penetration comparison (GH informal vs US ecommerce)
-    gh_informal = next(b for b in businesses if b.category == BusinessCategory.INFORMAL_RETAIL)
+    informal = next(b for b in businesses if b.category == BusinessCategory.INFORMAL_RETAIL)
     us_ecom = next(b for b in businesses if b.category == BusinessCategory.ECOMMERCE_PURE_PLAY)
 
     def avg_payment(biz_id):
@@ -99,12 +96,11 @@ def main() -> None:
         return sum(vals) / len(vals) if vals else 0
 
     print("\n--- Digital Payment Penetration (avg payment_volume) ---")
-    print(f"  Kwame's Corner Shop (GH informal):  ${avg_payment(gh_informal.id):,.0f}/mo")
-    print(f"  TechNova Online (US ecommerce):     ${avg_payment(us_ecom.id):,.0f}/mo")
+    print(f"  Main Street Corner Shop (informal):  ${avg_payment(informal.id):,.0f}/mo")
+    print(f"  TechNova Online (ecommerce):           ${avg_payment(us_ecom.id):,.0f}/mo")
 
-    # Missingness demo with high missingness config
     sparse_config = AdapterConfig(missingness_rate=0.50, seed=99)
-    sparse_adapter = adapters[0]  # payments
+    sparse_adapter = adapters[0]
     sparse_adapter.config = sparse_config
     sparse_obs = sparse_adapter.fetch(region, since)
     full_obs = per_adapter["synthetic_digital_payments"]
@@ -112,7 +108,6 @@ def main() -> None:
     print(f"  Default (10% missing):  {len(full_obs)} observations")
     print(f"  Sparse (50% missing):   {len(sparse_obs)} observations")
 
-    # Persist to DuckDB
     with tempfile.TemporaryDirectory() as tmp:
         repo = RevenueLensRepository(Path(tmp) / "phase2.duckdb")
         repo.upsert_businesses(businesses)
@@ -128,7 +123,6 @@ def main() -> None:
         for src, cnt in sources:
             print(f"    {src}: {cnt}")
 
-        # Reliability distribution
         rel_stats = repo.conn.execute(
             "SELECT MIN(reliability), AVG(reliability), MAX(reliability) FROM signal_observations"
         ).fetchone()

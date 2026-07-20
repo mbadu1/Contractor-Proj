@@ -22,13 +22,13 @@ from db.repository import RevenueLensRepository
 from simulation.markets import (
     CATEGORY_CHANNELS,
     COUNTRY_CITIES,
-    GH_CATEGORY_BOOST,
     MARKET_ADAPTER_PROFILES,
-    MARKET_SHARES,
     NAME_CORES,
     NAME_PREFIXES,
     NAME_SUFFIXES,
+    PRIMARY_MARKET,
     SIZE_TIER_WEIGHTS,
+    US_CATEGORY_BOOST,
 )
 from simulation.revenue import RevenueEngine, RevenueEngineConfig
 
@@ -75,12 +75,9 @@ class SyntheticUniverseGenerator:
                 return tier
         return SizeTier.SMALL
 
-    def _pick_category(self, country: str) -> BusinessCategory:
+    def _pick_category(self) -> BusinessCategory:
         categories = list(ALL_CATEGORIES)
-        if country == "GH":
-            weights = [1.8 if c in GH_CATEGORY_BOOST else 1.0 for c in categories]
-        else:
-            weights = [1.0] * len(categories)
+        weights = [1.4 if c in US_CATEGORY_BOOST else 1.0 for c in categories]
         total = sum(weights)
         r = self._rng.random() * total
         cumulative = 0.0
@@ -116,33 +113,27 @@ class SyntheticUniverseGenerator:
 
     def generate_businesses(self) -> list[Business]:
         n = self.config.n_businesses
-        counts = {c: int(n * share) for c, share in MARKET_SHARES.items()}
-        remainder = n - sum(counts.values())
-        for i, country in enumerate(MARKET_SHARES):
-            if i < remainder:
-                counts[country] += 1
-
+        cities = COUNTRY_CITIES[PRIMARY_MARKET]
         businesses: list[Business] = []
-        for country, count in counts.items():
-            cities = COUNTRY_CITIES[country]
-            for _ in range(count):
-                city, lat, lon = self._rng.choice(cities)
-                jitter_lat = lat + self._rng.uniform(-0.08, 0.08)
-                jitter_lon = lon + self._rng.uniform(-0.08, 0.08)
-                category = self._pick_category(country)
-                businesses.append(
-                    Business(
-                        id=uuid4(),
-                        name=self._make_name(),
-                        category=category,
-                        country=country,
-                        city=city,
-                        latitude=round(jitter_lat, 6),
-                        longitude=round(jitter_lon, 6),
-                        size_tier=self._pick_size_tier(),
-                        channels=self._pick_channels(category),
-                    )
+
+        for _ in range(n):
+            city, lat, lon = self._rng.choice(cities)
+            jitter_lat = lat + self._rng.uniform(-0.08, 0.08)
+            jitter_lon = lon + self._rng.uniform(-0.08, 0.08)
+            category = self._pick_category()
+            businesses.append(
+                Business(
+                    id=uuid4(),
+                    name=self._make_name(),
+                    category=category,
+                    country=PRIMARY_MARKET,
+                    city=city,
+                    latitude=round(jitter_lat, 6),
+                    longitude=round(jitter_lon, 6),
+                    size_tier=self._pick_size_tier(),
+                    channels=self._pick_channels(category),
                 )
+            )
         return businesses
 
     def _revenue_lookup(
@@ -150,8 +141,8 @@ class SyntheticUniverseGenerator:
     ) -> dict[tuple, float]:
         return {(r.business_id, r.period): r.revenue for r in true_revenue}
 
-    def _adapter_config_for_country(self, country: str, adapter_key: str) -> AdapterConfig:
-        profile = MARKET_ADAPTER_PROFILES[country]
+    def _adapter_config(self, adapter_key: str) -> AdapterConfig:
+        profile = MARKET_ADAPTER_PROFILES[PRIMARY_MARKET]
         missingness = profile.missingness_rate
         if adapter_key == "digital_payments":
             missingness += profile.payment_missingness_boost
@@ -181,26 +172,19 @@ class SyntheticUniverseGenerator:
         )
         region = RegionFilter()
 
-        all_obs: list[SignalObservation] = []
-        by_country: dict[str, list[Business]] = {}
-        for b in businesses:
-            by_country.setdefault(b.country, []).append(b)
+        catalog = InMemoryBusinessCatalog(businesses)
+        adapters = create_default_adapters(
+            catalog,
+            intensity=intensity,
+            config=self._adapter_config("default"),
+            seed=self.config.seed,
+        )
+        for adapter in adapters:
+            adapter.config = self._adapter_config(adapter.adapter_key)
 
-        for country, country_biz in by_country.items():
-            catalog = InMemoryBusinessCatalog(country_biz)
-            adapters = create_default_adapters(
-                catalog,
-                intensity=intensity,
-                config=self._adapter_config_for_country(country, "default"),
-                seed=self.config.seed,
-            )
-            # Apply per-adapter missingness overrides (esp. payments in GH)
-            for adapter in adapters:
-                adapter.config = self._adapter_config_for_country(
-                    country, adapter.adapter_key
-                )
-            for adapter in adapters:
-                all_obs.extend(adapter.fetch(region, since_dt))
+        all_obs: list[SignalObservation] = []
+        for adapter in adapters:
+            all_obs.extend(adapter.fetch(region, since_dt))
 
         return all_obs
 

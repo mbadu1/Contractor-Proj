@@ -29,23 +29,18 @@ DIGITAL_PENETRATION: dict[BusinessCategory, float] = {
 
 DEFAULT_DIGITAL_PENETRATION = 0.50
 
-# Country-level payment infrastructure multiplier
+# MVP scope: US-only market parameters
+PRIMARY_MARKET = "US"
+
 COUNTRY_PAYMENT_FACTOR: dict[str, float] = {
     "US": 1.0,
-    "GB": 0.95,
-    "UK": 0.95,
-    "GH": 0.45,
 }
 
-# Signal coverage by country (probability adapter has any data for a business)
 COUNTRY_SIGNAL_COVERAGE: dict[str, float] = {
     "US": 0.92,
-    "GB": 0.90,
-    "UK": 0.90,
-    "GH": 0.58,
 }
 
-DEFAULT_COUNTRY_COVERAGE = 0.75
+DEFAULT_COUNTRY_COVERAGE = 0.92
 
 # Size tier → base monthly activity scale (USD-equivalent latent intensity)
 SIZE_TIER_SCALE: dict[SizeTier, float] = {
@@ -137,7 +132,7 @@ def digital_penetration(category: BusinessCategory, channels: list[SalesChannel]
 
 
 def country_factor(country: str) -> float:
-    return COUNTRY_PAYMENT_FACTOR.get(country.upper(), 0.70)
+    return COUNTRY_PAYMENT_FACTOR.get(country.upper(), 1.0)
 
 
 def country_coverage(country: str) -> float:

@@ -28,6 +28,7 @@ from core.models import (
 def _biz(
     category: BusinessCategory = BusinessCategory.RESTAURANT_CAFE,
     country: str = "US",
+    city: str = "TestCity",
     channels: list[SalesChannel] | None = None,
     size: SizeTier = SizeTier.SMALL,
 ) -> Business:
@@ -36,7 +37,7 @@ def _biz(
         name="Test Business",
         category=category,
         country=country,
-        city="TestCity",
+        city=city,
         latitude=40.0,
         longitude=-74.0,
         size_tier=size,
@@ -62,7 +63,7 @@ class TestSignalAdapterInterface:
     def test_all_adapters_implement_fetch(self) -> None:
         businesses = [
             _biz(BusinessCategory.ECOMMERCE_PURE_PLAY, channels=[SalesChannel.ECOMMERCE]),
-            _biz(BusinessCategory.INFORMAL_RETAIL, country="GH"),
+            _biz(BusinessCategory.INFORMAL_RETAIL, country="US"),
         ]
         catalog = InMemoryBusinessCatalog(businesses)
         adapters = create_default_adapters(catalog, seed=1)
@@ -77,14 +78,14 @@ class TestSignalAdapterInterface:
                 assert o.reliability <= 1.0
                 assert o.source == adapter.source_name
 
-    def test_region_filter_by_country(self) -> None:
-        us = _biz(country="US")
-        gh = _biz(country="GH")
-        catalog = InMemoryBusinessCatalog([us, gh])
+    def test_region_filter_by_city(self) -> None:
+        austin = _biz(country="US", city="Austin")
+        chicago = _biz(country="US", city="Chicago")
+        catalog = InMemoryBusinessCatalog([austin, chicago])
         adapter = create_default_adapters(catalog, seed=2)[0]
         since = datetime(2025, 1, 1, tzinfo=timezone.utc)
-        obs = adapter.fetch(RegionFilter(country="GH"), since)
-        assert all(o.business_id == gh.id for o in obs)
+        obs = adapter.fetch(RegionFilter(city="Chicago"), since)
+        assert all(o.business_id == chicago.id for o in obs)
 
 
 class TestMissingnessAndNoise:
@@ -131,18 +132,31 @@ class TestAdapterSpecificBehavior:
         sku_obs = [o for o in obs if o.signal_type == SignalType.ECOMMERCE_SKU_COUNT]
         assert len(sku_obs) == 0
 
-    def test_ghana_lower_coverage_reflected_in_reliability(self) -> None:
-        us_biz = _biz(country="US", size=SizeTier.MEDIUM)
-        gh_biz = _biz(country="GH", size=SizeTier.MEDIUM)
-        catalog = InMemoryBusinessCatalog([us_biz, gh_biz])
+    def test_ecommerce_has_more_payment_signals_than_informal(self) -> None:
+        ecom = _biz(
+            BusinessCategory.ECOMMERCE_PURE_PLAY,
+            channels=[SalesChannel.ECOMMERCE],
+            size=SizeTier.MEDIUM,
+        )
+        informal = _biz(
+            BusinessCategory.INFORMAL_RETAIL,
+            channels=[SalesChannel.PHYSICAL],
+            size=SizeTier.MEDIUM,
+        )
+        catalog = InMemoryBusinessCatalog([ecom, informal])
         adapter = create_default_adapters(catalog, seed=7)[0]
         since = datetime(2025, 3, 1, tzinfo=timezone.utc)
         obs = adapter.fetch(RegionFilter(), since)
 
-        us_rel = [o.reliability for o in obs if o.business_id == us_biz.id]
-        gh_rel = [o.reliability for o in obs if o.business_id == gh_biz.id]
-        if us_rel and gh_rel:
-            assert sum(us_rel) / len(us_rel) >= sum(gh_rel) / len(gh_rel)
+        ecom_payments = [
+            o for o in obs
+            if o.business_id == ecom.id and o.signal_type == SignalType.PAYMENT_VOLUME
+        ]
+        informal_payments = [
+            o for o in obs
+            if o.business_id == informal.id and o.signal_type == SignalType.PAYMENT_VOLUME
+        ]
+        assert len(ecom_payments) >= len(informal_payments)
 
     def test_ecommerce_higher_payment_volume_than_informal(self) -> None:
         ecom = _biz(
@@ -152,7 +166,7 @@ class TestAdapterSpecificBehavior:
         )
         informal = _biz(
             BusinessCategory.INFORMAL_RETAIL,
-            country="GH",
+            country="US",
             channels=[SalesChannel.PHYSICAL],
             size=SizeTier.SMALL,
         )

@@ -29,24 +29,24 @@ def main() -> None:
             RawBusinessRecord(
                 source="google_places",
                 source_id="gp-101",
-                name="Kwame's Market Ltd",
+                name="Joe's Fresh Market",
                 category=BusinessCategory.GROCERY_SUPERMARKET,
-                country="GH",
-                city="Accra",
-                latitude=5.6037,
-                longitude=-0.1870,
+                country="US",
+                city="Chicago",
+                latitude=41.8781,
+                longitude=-87.6298,
                 size_tier=SizeTier.MEDIUM,
                 channels=[SalesChannel.PHYSICAL],
             ),
             RawBusinessRecord(
                 source="openstreetmap",
                 source_id="osm-8821",
-                name="Kwames Market",
+                name="Joes Fresh Market",
                 category=BusinessCategory.GROCERY_SUPERMARKET,
-                country="GH",
-                city="Accra",
-                latitude=5.6038,
-                longitude=-0.1871,
+                country="US",
+                city="Chicago",
+                latitude=41.8782,
+                longitude=-87.6299,
                 size_tier=SizeTier.MEDIUM,
                 channels=[SalesChannel.PHYSICAL],
             ),
@@ -78,13 +78,16 @@ def main() -> None:
         repo.upsert_businesses(resolution.canonical_businesses)
         repo.upsert_source_mappings(resolution.source_to_canonical)
 
-        # Insert sample signals and an estimate for the Ghana business
-        ghana_biz = next(b for b in resolution.canonical_businesses if b.country == "GH")
+        # Insert sample signals and an estimate for the Chicago grocery business
+        grocery_biz = next(
+            b for b in resolution.canonical_businesses
+            if b.category == BusinessCategory.GROCERY_SUPERMARKET
+        )
         now = datetime(2025, 6, 1, tzinfo=timezone.utc)
 
         signals = [
             SignalObservation(
-                business_id=ghana_biz.id,
+                business_id=grocery_biz.id,
                 signal_type=SignalType.PAYMENT_TRANSACTION_COUNT,
                 value=1240.0,
                 timestamp=now,
@@ -92,7 +95,7 @@ def main() -> None:
                 reliability=0.72,
             ),
             SignalObservation(
-                business_id=ghana_biz.id,
+                business_id=grocery_biz.id,
                 signal_type=SignalType.REVIEW_VELOCITY,
                 value=18.5,
                 timestamp=now,
@@ -103,7 +106,7 @@ def main() -> None:
         repo.insert_signal_observations(signals)
 
         estimate = RevenueEstimate(
-            business_id=ghana_biz.id,
+            business_id=grocery_biz.id,
             period="2025-06",
             point_estimate=185_000.0,
             ci_low=142_000.0,
@@ -131,14 +134,14 @@ def main() -> None:
             resolved = repo.resolve_business_id(source, sid)
             print(f"  ({source}, {sid}) → {resolved}")
 
-        print("\n--- Signals for Ghana Business ---")
-        for sig in repo.get_signals_for_business(ghana_biz.id):
+        print("\n--- Signals for Chicago Grocery Business ---")
+        for sig in repo.get_signals_for_business(grocery_biz.id):
             print(
                 f"  {sig.signal_type.value}: {sig.value} "
                 f"(reliability={sig.reliability}, source={sig.source})"
             )
 
-        latest = repo.get_latest_estimate(ghana_biz.id)
+        latest = repo.get_latest_estimate(grocery_biz.id)
         assert latest is not None
         print("\n--- Latest Revenue Estimate ---")
         print(
