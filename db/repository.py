@@ -1,0 +1,400 @@
+"""DuckDB repository layer for RevenueLens."""
+
+from __future__ import annotations
+
+import json
+from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Iterator
+from uuid import UUID
+
+import duckdb
+
+from core.models import (
+    Business,
+    BusinessCategory,
+    RevenueEstimate,
+    SalesChannel,
+    SignalObservation,
+    SignalType,
+    SizeTier,
+)
+from db.schema import ALL_DDL
+
+
+class RevenueLensRepository:
+    """Analytical storage backed by a single DuckDB file."""
+
+    def __init__(self, db_path: str | Path = "data/revenuelens.duckdb") -> None:
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn: duckdb.DuckDBPyConnection | None = None
+
+    @property
+    def conn(self) -> duckdb.DuckDBPyConnection:
+        if self._conn is None:
+            self._conn = duckdb.connect(str(self.db_path))
+            self.initialize()
+        return self._conn
+
+    def initialize(self) -> None:
+        """Create tables and indexes if they do not exist."""
+        self.conn.execute(ALL_DDL)
+
+    def close(self) -> None:
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
+
+    @contextmanager
+    def session(self) -> Iterator["RevenueLensRepository"]:
+        try:
+            yield self
+            self.conn.commit()
+        except Exception:
+            self.conn.rollback()
+            raise
+
+    # ------------------------------------------------------------------
+    # Businesses
+    # ------------------------------------------------------------------
+
+    def upsert_business(self, business: Business) -> None:
+        channels = [c.value for c in business.channels]
+        self.conn.execute(
+            """
+            INSERT INTO businesses (
+                id, name, category, country, city,
+                latitude, longitude, size_tier, channels
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET
+                name = excluded.name,
+                category = excluded.category,
+                country = excluded.country,
+                city = excluded.city,
+                latitude = excluded.latitude,
+                longitude = excluded.longitude,
+                size_tier = excluded.size_tier,
+                channels = excluded.channels,
+                updated_at = now()
+            """,
+            [
+                str(business.id),
+                business.name,
+                business.category.value,
+                business.country,
+                business.city,
+                business.latitude,
+                business.longitude,
+                business.size_tier.value,
+                channels,
+            ],
+        )
+
+    def upsert_businesses(self, businesses: list[Business]) -> int:
+        for b in businesses:
+            self.upsert_business(b)
+        return len(businesses)
+
+    def get_business(self, business_id: UUID) -> Business | None:
+        row = self.conn.execute(
+            "SELECT * FROM businesses WHERE id = ?", [str(business_id)]
+        ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_business(row)
+
+    def list_businesses(
+        self,
+        *,
+        country: str | None = None,
+        city: str | None = None,
+        category: BusinessCategory | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Business]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if country:
+            clauses.append("country = ?")
+            params.append(country.upper())
+        if city:
+            clauses.append("LOWER(city) = LOWER(?)")
+            params.append(city)
+        if category:
+            clauses.append("category = ?")
+            params.append(category.value)
+
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([limit, offset])
+        rows = self.conn.execute(
+            f"""
+            SELECT * FROM businesses
+            {where}
+            ORDER BY name
+            LIMIT ? OFFSET ?
+            """,
+            params,
+        ).fetchall()
+        return [self._row_to_business(r) for r in rows]
+
+    def count_businesses(self, **filters: object) -> int:
+        country = filters.get("country")
+        row = self.conn.execute(
+            "SELECT COUNT(*) FROM businesses"
+            + (" WHERE country = ?" if country else ""),
+            [country.upper()] if country else [],
+        ).fetchone()
+        return int(row[0]) if row else 0
+
+    # ------------------------------------------------------------------
+    # Source mappings (entity resolution)
+    # ------------------------------------------------------------------
+
+    def upsert_source_mapping(
+        self, source: str, source_id: str, business_id: UUID
+    ) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO source_mappings (source, source_id, business_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT (source, source_id) DO UPDATE SET
+                business_id = excluded.business_id
+            """,
+            [source, source_id, str(business_id)],
+        )
+
+    def upsert_source_mappings(
+        self, mapping: dict[tuple[str, str], UUID]
+    ) -> int:
+        for (source, source_id), bid in mapping.items():
+            self.upsert_source_mapping(source, source_id, bid)
+        return len(mapping)
+
+    def resolve_business_id(self, source: str, source_id: str) -> UUID | None:
+        row = self.conn.execute(
+            "SELECT business_id FROM source_mappings WHERE source = ? AND source_id = ?",
+            [source, source_id],
+        ).fetchone()
+        return UUID(row[0]) if row else None
+
+    # ------------------------------------------------------------------
+    # Signal observations
+    # ------------------------------------------------------------------
+
+    def insert_signal_observation(self, obs: SignalObservation) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO signal_observations (
+                business_id, signal_type, value, timestamp, source, reliability
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                str(obs.business_id),
+                obs.signal_type.value,
+                obs.value,
+                obs.timestamp,
+                obs.source,
+                obs.reliability,
+            ],
+        )
+
+    def insert_signal_observations(self, observations: list[SignalObservation]) -> int:
+        if not observations:
+            return 0
+        self.conn.executemany(
+            """
+            INSERT INTO signal_observations (
+                business_id, signal_type, value, timestamp, source, reliability
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    str(o.business_id),
+                    o.signal_type.value,
+                    o.value,
+                    o.timestamp,
+                    o.source,
+                    o.reliability,
+                )
+                for o in observations
+            ],
+        )
+        return len(observations)
+
+    def get_signals_for_business(
+        self,
+        business_id: UUID,
+        *,
+        since: datetime | None = None,
+        signal_type: SignalType | None = None,
+    ) -> list[SignalObservation]:
+        clauses = ["business_id = ?"]
+        params: list[object] = [str(business_id)]
+        if since:
+            clauses.append("timestamp >= ?")
+            params.append(since)
+        if signal_type:
+            clauses.append("signal_type = ?")
+            params.append(signal_type.value)
+
+        rows = self.conn.execute(
+            f"""
+            SELECT business_id, signal_type, value, timestamp, source, reliability
+            FROM signal_observations
+            WHERE {' AND '.join(clauses)}
+            ORDER BY timestamp
+            """,
+            params,
+        ).fetchall()
+        return [self._row_to_signal(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Revenue estimates
+    # ------------------------------------------------------------------
+
+    def upsert_revenue_estimate(self, estimate: RevenueEstimate) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO revenue_estimates (
+                business_id, period, point_estimate, ci_low, ci_high,
+                confidence_score, signal_contributions, model_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (business_id, period, model_version) DO UPDATE SET
+                point_estimate = excluded.point_estimate,
+                ci_low = excluded.ci_low,
+                ci_high = excluded.ci_high,
+                confidence_score = excluded.confidence_score,
+                signal_contributions = excluded.signal_contributions,
+                created_at = now()
+            """,
+            [
+                str(estimate.business_id),
+                estimate.period,
+                estimate.point_estimate,
+                estimate.ci_low,
+                estimate.ci_high,
+                estimate.confidence_score,
+                json.dumps(estimate.signal_contributions),
+                estimate.model_version,
+            ],
+        )
+
+    def upsert_revenue_estimates(self, estimates: list[RevenueEstimate]) -> int:
+        for e in estimates:
+            self.upsert_revenue_estimate(e)
+        return len(estimates)
+
+    def get_latest_estimate(
+        self, business_id: UUID, model_version: str | None = None
+    ) -> RevenueEstimate | None:
+        if model_version:
+            row = self.conn.execute(
+                """
+                SELECT business_id, period, point_estimate, ci_low, ci_high,
+                       confidence_score, signal_contributions, model_version
+                FROM revenue_estimates
+                WHERE business_id = ? AND model_version = ?
+                ORDER BY period DESC
+                LIMIT 1
+                """,
+                [str(business_id), model_version],
+            ).fetchone()
+        else:
+            row = self.conn.execute(
+                """
+                SELECT business_id, period, point_estimate, ci_low, ci_high,
+                       confidence_score, signal_contributions, model_version
+                FROM revenue_estimates
+                WHERE business_id = ?
+                ORDER BY period DESC, created_at DESC
+                LIMIT 1
+                """,
+                [str(business_id)],
+            ).fetchone()
+        return self._row_to_estimate(row) if row else None
+
+    def get_estimate_history(
+        self,
+        business_id: UUID,
+        *,
+        model_version: str | None = None,
+        limit: int = 24,
+    ) -> list[RevenueEstimate]:
+        params: list[object] = [str(business_id)]
+        version_clause = ""
+        if model_version:
+            version_clause = "AND model_version = ?"
+            params.append(model_version)
+        params.append(limit)
+
+        rows = self.conn.execute(
+            f"""
+            SELECT business_id, period, point_estimate, ci_low, ci_high,
+                   confidence_score, signal_contributions, model_version
+            FROM revenue_estimates
+            WHERE business_id = ? {version_clause}
+            ORDER BY period DESC
+            LIMIT ?
+            """,
+            params,
+        ).fetchall()
+        return [self._row_to_estimate(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Row mappers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _row_to_business(row: tuple) -> Business:
+        # Column order from SELECT *: id, name, category, country, city,
+        # latitude, longitude, size_tier, channels, created_at, updated_at
+        channels_raw = row[8]
+        if isinstance(channels_raw, str):
+            channels_raw = json.loads(channels_raw)
+        return Business(
+            id=UUID(row[0]),
+            name=row[1],
+            category=BusinessCategory(row[2]),
+            country=row[3],
+            city=row[4],
+            latitude=row[5],
+            longitude=row[6],
+            size_tier=SizeTier(row[7]),
+            channels=[SalesChannel(c) for c in channels_raw],
+        )
+
+    @staticmethod
+    def _row_to_signal(row: tuple) -> SignalObservation:
+        return SignalObservation(
+            business_id=UUID(row[0]),
+            signal_type=SignalType(row[1]),
+            value=row[2],
+            timestamp=row[3],
+            source=row[4],
+            reliability=row[5],
+        )
+
+    @staticmethod
+    def _row_to_estimate(row: tuple) -> RevenueEstimate:
+        contributions = row[6]
+        if isinstance(contributions, str):
+            contributions = json.loads(contributions)
+        return RevenueEstimate(
+            business_id=UUID(row[0]),
+            period=row[1],
+            point_estimate=row[2],
+            ci_low=row[3],
+            ci_high=row[4],
+            confidence_score=row[5],
+            signal_contributions=contributions,
+            model_version=row[7],
+        )
+
+
+def get_repository(db_path: str | Path = "data/revenuelens.duckdb") -> RevenueLensRepository:
+    """Factory for a initialized repository."""
+    repo = RevenueLensRepository(db_path)
+    repo.initialize()
+    return repo
