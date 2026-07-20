@@ -21,7 +21,7 @@ from core.models import (
     SalesChannel,
     SizeTier,
 )
-from db.repository import RevenueLensRepository
+from db.repository import RevWatchRepository
 
 
 def _sample_businesses() -> list[Business]:
@@ -109,7 +109,7 @@ def main() -> None:
     print(f"  Sparse (50% missing):   {len(sparse_obs)} observations")
 
     with tempfile.TemporaryDirectory() as tmp:
-        repo = RevenueLensRepository(Path(tmp) / "phase2.duckdb")
+        repo = RevWatchRepository(Path(tmp) / "phase2.duckdb")
         repo.upsert_businesses(businesses)
         repo.insert_signal_observations(merged.observations)
 

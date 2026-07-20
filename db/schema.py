@@ -1,4 +1,4 @@
-"""DuckDB schema definitions for RevenueLens."""
+"""DuckDB schema definitions for RevWatch."""
 
 from __future__ import annotations
 

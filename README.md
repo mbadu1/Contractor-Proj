@@ -1,6 +1,6 @@
-# RevenueLens
+# RevWatch
 
-**RevenueLens** is a system that tries to figure out how much money businesses are making — without asking them directly.
+**RevWatch** is a system that tries to figure out how much money businesses are making — without asking them directly.
 
 Instead of waiting for companies to report their revenue (which most small businesses never do), we look at *clues* left behind in the real world: payment activity, online reviews, job postings, website traffic, supplier shipments, and things like that. We combine those clues with statistics and machine learning to produce a revenue estimate — and we're honest about how confident we are in each number.
 
@@ -117,7 +117,7 @@ make phase3-quick   # Generate 500-business US universe (~70s)
 make phase3-demo    # Full 5,000-business US universe (~10 min)
 ```
 
-Generated data lands in `data/revenuelens.duckdb`.
+Generated data lands in `data/revwatch.duckdb`.
 
 ---
 

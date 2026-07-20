@@ -1,7 +1,7 @@
 [project]
-name = "revenuelens"
+name = "revwatch"
 version = "0.1.0"
-description = "Autonomous Business Revenue Intelligence Platform"
+description = "RevWatch — Autonomous Business Revenue Intelligence Platform"
 requires-python = ">=3.11"
 dependencies = []
 

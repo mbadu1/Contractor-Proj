@@ -1,4 +1,4 @@
-"""Core domain models for RevenueLens."""
+"""Core domain models for RevWatch."""
 
 from __future__ import annotations
 

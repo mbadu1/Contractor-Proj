@@ -94,17 +94,23 @@ class TestMissingnessAndNoise:
         catalog = InMemoryBusinessCatalog([biz])
         intensity = LatentActivityProvider(seed=3)
         since = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        until = datetime(2025, 12, 1, tzinfo=timezone.utc)
         region = RegionFilter()
 
         low_miss = DigitalPaymentAdapter(
-            catalog, intensity, AdapterConfig(missingness_rate=0.0, seed=10)
+            catalog,
+            intensity,
+            AdapterConfig(missingness_rate=0.0, seed=10, until=until),
         )
         high_miss = DigitalPaymentAdapter(
-            catalog, intensity, AdapterConfig(missingness_rate=0.80, seed=10)
+            catalog,
+            intensity,
+            AdapterConfig(missingness_rate=0.50, seed=10, until=until),
         )
 
         low_obs = low_miss.fetch(region, since)
         high_obs = high_miss.fetch(region, since)
+        assert len(low_obs) > 0
         assert len(high_obs) < len(low_obs)
 
     def test_noise_produces_variance(self) -> None:

@@ -18,7 +18,7 @@ from core.models import (
     SizeTier,
     TrueRevenue,
 )
-from db.repository import RevenueLensRepository
+from db.repository import RevWatchRepository
 from simulation.markets import (
     CATEGORY_CHANNELS,
     COUNTRY_CITIES,
@@ -40,7 +40,7 @@ class GeneratorConfig:
     end_year: int = 2025
     end_month: int = 12
     seed: int = 42
-    db_path: Path = field(default_factory=lambda: Path("data/revenuelens.duckdb"))
+    db_path: Path = field(default_factory=lambda: Path("data/revwatch.duckdb"))
     clear_existing: bool = True
 
 
@@ -193,8 +193,8 @@ class SyntheticUniverseGenerator:
         businesses: list[Business],
         true_revenue: list[TrueRevenue],
         observations: list,
-    ) -> RevenueLensRepository:
-        repo = RevenueLensRepository(self.config.db_path)
+    ) -> RevWatchRepository:
+        repo = RevWatchRepository(self.config.db_path)
         if self.config.clear_existing:
             for table in (
                 "signal_observations",
@@ -225,7 +225,7 @@ class SyntheticUniverseGenerator:
 
 def generate_universe(
     n_businesses: int = 5_000,
-    db_path: str | Path = "data/revenuelens.duckdb",
+    db_path: str | Path = "data/revwatch.duckdb",
     seed: int = 42,
 ) -> GenerationResult:
     """Convenience entry point for full universe generation."""

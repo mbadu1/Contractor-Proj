@@ -1,4 +1,4 @@
-"""DuckDB repository layer for RevenueLens."""
+"""DuckDB repository layer for RevWatch."""
 
 from __future__ import annotations
 
@@ -24,10 +24,10 @@ from core.models import (
 from db.schema import ALL_DDL
 
 
-class RevenueLensRepository:
+class RevWatchRepository:
     """Analytical storage backed by a single DuckDB file."""
 
-    def __init__(self, db_path: str | Path = "data/revenuelens.duckdb") -> None:
+    def __init__(self, db_path: str | Path = "data/revwatch.duckdb") -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn: duckdb.DuckDBPyConnection | None = None
@@ -49,7 +49,7 @@ class RevenueLensRepository:
             self._conn = None
 
     @contextmanager
-    def session(self) -> Iterator["RevenueLensRepository"]:
+    def session(self) -> Iterator["RevWatchRepository"]:
         try:
             yield self
             self.conn.commit()
@@ -481,8 +481,8 @@ class RevenueLensRepository:
         )
 
 
-def get_repository(db_path: str | Path = "data/revenuelens.duckdb") -> RevenueLensRepository:
+def get_repository(db_path: str | Path = "data/revwatch.duckdb") -> RevWatchRepository:
     """Factory for a initialized repository."""
-    repo = RevenueLensRepository(db_path)
+    repo = RevWatchRepository(db_path)
     repo.initialize()
     return repo

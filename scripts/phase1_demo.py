@@ -16,13 +16,13 @@ from core.models import (
     SignalType,
     SizeTier,
 )
-from db.repository import RevenueLensRepository
+from db.repository import RevWatchRepository
 
 
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "phase1.duckdb"
-        repo = RevenueLensRepository(db_path)
+        repo = RevWatchRepository(db_path)
 
         # Simulate ingesting duplicate records from two sources
         raw_records = [

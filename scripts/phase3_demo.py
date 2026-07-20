@@ -8,16 +8,16 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from core.models import SignalType
-from db.repository import RevenueLensRepository
+from db.repository import RevWatchRepository
 from simulation import GeneratorConfig, SyntheticUniverseGenerator
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="RevenueLens Phase 3 generator demo")
+    parser = argparse.ArgumentParser(description="RevWatch Phase 3 generator demo")
     parser.add_argument("--businesses", type=int, default=5000, help="Number of businesses")
     parser.add_argument("--quick", action="store_true", help="Quick run with 500 businesses")
     parser.add_argument(
-        "--db", type=str, default="data/revenuelens.duckdb", help="DuckDB output path"
+        "--db", type=str, default="data/revwatch.duckdb", help="DuckDB output path"
     )
     args = parser.parse_args()
 
@@ -34,7 +34,7 @@ def main() -> None:
     result = gen.run()
     elapsed = time.perf_counter() - t0
 
-    repo = RevenueLensRepository(db_path)
+    repo = RevWatchRepository(db_path)
 
     # Business distribution
     by_city = repo.conn.execute(

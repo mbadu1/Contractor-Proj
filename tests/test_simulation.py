@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from core.models import SignalType
-from db.repository import RevenueLensRepository
+from db.repository import RevWatchRepository
 from simulation import GeneratorConfig, SyntheticUniverseGenerator
 from simulation.revenue import RevenueEngine, RevenueEngineConfig
 
@@ -70,7 +70,7 @@ class TestSyntheticUniverseGenerator:
             assert len(result.true_revenue) == 120 * 24
             assert result.signal_count > 0
 
-            repo = RevenueLensRepository(db)
+            repo = RevWatchRepository(db)
             assert repo.count_businesses() == 120
             assert repo.count_true_revenue() == 120 * 24
             repo.close()
@@ -88,7 +88,7 @@ class TestSyntheticUniverseGenerator:
             db = Path(tmp) / "test.duckdb"
             config = GeneratorConfig(n_businesses=300, db_path=db, seed=11)
             SyntheticUniverseGenerator(config).run()
-            repo = RevenueLensRepository(db)
+            repo = RevWatchRepository(db)
 
             def payment_rate(category: str) -> float:
                 row = repo.conn.execute(
@@ -114,7 +114,7 @@ class TestSyntheticUniverseGenerator:
             db = Path(tmp) / "test.duckdb"
             config = GeneratorConfig(n_businesses=50, db_path=db, seed=3)
             result = SyntheticUniverseGenerator(config).run()
-            repo = RevenueLensRepository(db)
+            repo = RevWatchRepository(db)
             biz_id = result.businesses[0].id
             history = repo.get_true_revenue(biz_id, limit=24)
             assert len(history) == 24
@@ -127,7 +127,7 @@ class TestSyntheticUniverseGenerator:
             db = Path(tmp) / "test.duckdb"
             config = GeneratorConfig(n_businesses=200, db_path=db, seed=5)
             SyntheticUniverseGenerator(config).run()
-            repo = RevenueLensRepository(db)
+            repo = RevWatchRepository(db)
             corr = repo.conn.execute(
                 """
                 SELECT CORR(tr.revenue, s.value)
