@@ -8,7 +8,7 @@ This is the MVP. Right now it runs on **fake but realistic data** for **US busin
 
 ---
 
-## Progress Memo (Phases 1–5)
+## Progress Memo (Phases 1–6)
 
 *Last updated: July 2026*
 
@@ -25,8 +25,9 @@ We've built the foundation. The system can now:
 3. Generate a fake universe of ~5,000 US businesses with known hidden revenue, so we can test whether our guesses are any good
 4. **Actually estimate revenue** from those clues — with a confidence score and range, not just a single number
 5. **Check its own homework** and **run on a schedule** without someone babysitting it
+6. **Serve it over an API** so other apps (and eventually the dashboard) can query estimates
 
-We have **not** built the API or dashboard yet. That's Phases 6–7.
+We have **not** built the dashboard yet. That's Phase 7.
 
 ---
 
@@ -155,13 +156,38 @@ Quick-run results (500 US businesses):
 
 ---
 
+### Phase 6 — The front door (done)
+
+Other systems (and people) can now ask RevWatch questions over HTTP.
+
+**Endpoints**
+
+| Method | Path | What you get |
+|--------|------|--------------|
+| GET | `/businesses` | Searchable list — filter by city, category, revenue band, min confidence |
+| GET | `/businesses/{id}/estimate` | Current estimate + up to 24 months of history + which clues mattered |
+| GET | `/markets/{country}/summary` | Revenue by category, concentration (HHI), commercial density by city |
+| GET | `/rankings` | Top categories/cities, growth leaders and decliners |
+| GET | `/validation/latest` | Model health (MAPE, coverage, calibration) |
+| POST | `/signals/ingest` | Drop in new clue data (for real adapters later) |
+| GET | `/health` | Is the API up, how many businesses, which model is live? |
+| GET | `/docs` | Interactive OpenAPI docs (Swagger UI) |
+
+Every estimate always includes a **confidence interval** and a **confidence score** — never a bare number.
+
+There's a stub API-key gate (`X-API-Key` / `REVWATCH_API_KEY`). Leave the env var unset for local demo mode; set it when you want to lock things down.
+
+**In plain terms:** You can now query revenue estimates like a normal web API, and browse the docs in a browser.
+
+---
+
 ### What's next
 
 | Phase | What it does | Status |
 |-------|-------------|--------|
 | 4 | Estimation engine — guess revenue from signals | Done |
 | 5 | Validation + autonomous scheduled runs | Done |
-| 6 | API (FastAPI) | Not started |
+| 6 | API (FastAPI) | Done |
 | 7 | Dashboard (Next.js) | Not started |
 
 The end goal is `make demo` — one command that generates data, trains the model, and serves the API + dashboard.
@@ -185,6 +211,8 @@ make phase3-demo    # Full 5,000-business US universe (~10 min)
 make phase4-demo    # Train estimator + produce estimates (~3 min)
 make phase4-full    # Same on full dataset if already generated
 make phase5-demo    # Validate + run one autonomous cycle (~3 min)
+make phase6-demo    # Smoke-test API endpoints
+make api            # Serve API at http://127.0.0.1:8000 (docs at /docs)
 make scheduler      # Start long-running APScheduler loop
 ```
 
@@ -200,6 +228,7 @@ adapters/         Pluggable signal sources (6 synthetic adapters)
 simulation/       Fake US business universe + hidden revenue generator
 engine/           Features, confidence, LightGBM estimator, validation
 orchestration/    APScheduler jobs (ingest / re-estimate / retrain gate)
+api/              FastAPI app (businesses, markets, rankings, validation)
 db/               DuckDB schema + repository layer
 scripts/          Phase demo scripts
 tests/            Unit tests

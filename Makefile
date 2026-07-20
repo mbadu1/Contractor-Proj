@@ -1,4 +1,4 @@
-.PHONY: install test phase1-demo phase2-demo phase3-demo phase3-quick phase4-demo phase4-full phase5-demo scheduler
+.PHONY: install test phase1-demo phase2-demo phase3-demo phase3-quick phase4-demo phase4-full phase5-demo phase6-demo api scheduler
 
 PYTHONPATH ?= .
 
@@ -28,6 +28,12 @@ phase4-full:
 
 phase5-demo:
 	PYTHONPATH=$(PYTHONPATH) python scripts/phase5_demo.py --quick
+
+phase6-demo:
+	PYTHONPATH=$(PYTHONPATH) python scripts/phase6_demo.py
+
+api:
+	PYTHONPATH=$(PYTHONPATH) uvicorn api.main:app --host 0.0.0.0 --port 8000
 
 scheduler:
 	PYTHONPATH=$(PYTHONPATH) python -m orchestration.scheduler
