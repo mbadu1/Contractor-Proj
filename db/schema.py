@@ -69,9 +69,26 @@ CREATE TABLE IF NOT EXISTS source_mappings (
 );
 """
 
+TRUE_REVENUE_DDL = """
+CREATE TABLE IF NOT EXISTS true_revenue (
+    business_id         VARCHAR NOT NULL REFERENCES businesses(id),
+    period              VARCHAR NOT NULL,
+    revenue             DOUBLE NOT NULL,
+    trend_factor        DOUBLE NOT NULL DEFAULT 1.0,
+    seasonal_factor     DOUBLE NOT NULL DEFAULT 1.0,
+    shock_factor        DOUBLE NOT NULL DEFAULT 1.0,
+    created_at          TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (business_id, period)
+);
+
+CREATE INDEX IF NOT EXISTS idx_true_revenue_period ON true_revenue(period);
+CREATE INDEX IF NOT EXISTS idx_true_revenue_business ON true_revenue(business_id);
+"""
+
 ALL_DDL = (
     BUSINESSES_DDL
     + SIGNAL_OBSERVATIONS_DDL
     + REVENUE_ESTIMATES_DDL
     + SOURCE_MAPPINGS_DDL
+    + TRUE_REVENUE_DDL
 )

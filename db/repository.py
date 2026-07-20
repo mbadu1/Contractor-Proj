@@ -19,6 +19,7 @@ from core.models import (
     SignalObservation,
     SignalType,
     SizeTier,
+    TrueRevenue,
 )
 from db.schema import ALL_DDL
 
@@ -343,6 +344,82 @@ class RevenueLensRepository:
         return [self._row_to_estimate(r) for r in rows]
 
     # ------------------------------------------------------------------
+    # True revenue (validation only — never used by estimation engine)
+    # ------------------------------------------------------------------
+
+    def insert_true_revenue(self, record: TrueRevenue) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO true_revenue (
+                business_id, period, revenue, trend_factor, seasonal_factor, shock_factor
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (business_id, period) DO UPDATE SET
+                revenue = excluded.revenue,
+                trend_factor = excluded.trend_factor,
+                seasonal_factor = excluded.seasonal_factor,
+                shock_factor = excluded.shock_factor
+            """,
+            [
+                str(record.business_id),
+                record.period,
+                record.revenue,
+                record.trend_factor,
+                record.seasonal_factor,
+                record.shock_factor,
+            ],
+        )
+
+    def insert_true_revenue_batch(self, records: list[TrueRevenue]) -> int:
+        if not records:
+            return 0
+        self.conn.executemany(
+            """
+            INSERT INTO true_revenue (
+                business_id, period, revenue, trend_factor, seasonal_factor, shock_factor
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (business_id, period) DO UPDATE SET
+                revenue = excluded.revenue,
+                trend_factor = excluded.trend_factor,
+                seasonal_factor = excluded.seasonal_factor,
+                shock_factor = excluded.shock_factor
+            """,
+            [
+                (
+                    str(r.business_id),
+                    r.period,
+                    r.revenue,
+                    r.trend_factor,
+                    r.seasonal_factor,
+                    r.shock_factor,
+                )
+                for r in records
+            ],
+        )
+        return len(records)
+
+    def get_true_revenue(
+        self,
+        business_id: UUID,
+        *,
+        limit: int = 24,
+    ) -> list[TrueRevenue]:
+        rows = self.conn.execute(
+            """
+            SELECT business_id, period, revenue, trend_factor, seasonal_factor, shock_factor
+            FROM true_revenue
+            WHERE business_id = ?
+            ORDER BY period DESC
+            LIMIT ?
+            """,
+            [str(business_id), limit],
+        ).fetchall()
+        return [self._row_to_true_revenue(r) for r in rows]
+
+    def count_true_revenue(self) -> int:
+        row = self.conn.execute("SELECT COUNT(*) FROM true_revenue").fetchone()
+        return int(row[0]) if row else 0
+
+    # ------------------------------------------------------------------
     # Row mappers
     # ------------------------------------------------------------------
 
@@ -374,6 +451,17 @@ class RevenueLensRepository:
             timestamp=row[3],
             source=row[4],
             reliability=row[5],
+        )
+
+    @staticmethod
+    def _row_to_true_revenue(row: tuple) -> TrueRevenue:
+        return TrueRevenue(
+            business_id=UUID(row[0]),
+            period=row[1],
+            revenue=row[2],
+            trend_factor=row[3],
+            seasonal_factor=row[4],
+            shock_factor=row[5],
         )
 
     @staticmethod

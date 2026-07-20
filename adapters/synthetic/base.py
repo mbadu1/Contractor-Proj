@@ -62,14 +62,15 @@ class SyntheticSignalAdapter(SignalAdapter):
         """Return raw signal value before noise, or None to skip this signal."""
 
     def _periods_since(self, since: datetime) -> list[datetime]:
-        """Monthly period anchors from since through now (UTC)."""
+        """Monthly period anchors from since through until (or current month)."""
         since = since.astimezone(timezone.utc)
-        now = datetime.now(timezone.utc)
+        end = self.config.until or datetime.now(timezone.utc)
+        end = end.astimezone(timezone.utc)
         periods: list[datetime] = []
         year, month = since.year, since.month
         while True:
             period = datetime(year, month, 1, tzinfo=timezone.utc)
-            if period > now:
+            if period > end:
                 break
             if period >= datetime(since.year, since.month, 1, tzinfo=timezone.utc):
                 periods.append(period)

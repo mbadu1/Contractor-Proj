@@ -171,3 +171,18 @@ class RawBusinessRecord(BaseModel):
     longitude: float
     size_tier: SizeTier | None = None
     channels: list[SalesChannel] | None = None
+
+
+class TrueRevenue(BaseModel):
+    """
+    Hidden ground-truth monthly revenue — validation only.
+
+    The estimation engine must never read this table during training or inference.
+    """
+
+    business_id: UUID
+    period: str = Field(pattern=r"^\d{4}-\d{2}$")
+    revenue: float = Field(ge=0.0)
+    trend_factor: float = Field(default=1.0, ge=0.0)
+    seasonal_factor: float = Field(default=1.0, ge=0.0)
+    shock_factor: float = Field(default=1.0, ge=0.0)

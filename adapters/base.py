@@ -39,6 +39,8 @@ class AdapterConfig:
     seed: int | None = None
     # Per-business signal absence: if True, a business may miss ALL signals from this adapter
     business_dropout_rate: float = 0.05
+    # Optional fixed end of fetch window (inclusive month). Defaults to current UTC month.
+    until: datetime | None = None
 
 
 class BusinessCatalog(Protocol):
