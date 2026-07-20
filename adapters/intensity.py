@@ -62,9 +62,9 @@ class LatentActivityProvider:
 
 class RevenueDrivenIntensityProvider:
     """
-    Stub for Phase 3 — looks up true monthly revenue by business + period.
+    Maps true monthly revenue to adapter activity intensity.
 
-    Phase 2 defines the interface; implementation added in simulation/generator.
+    Used by Phase 3 generator to derive signals from hidden ground truth.
     """
 
     def __init__(self, revenue_lookup: dict[tuple[UUID, str], float]) -> None:
